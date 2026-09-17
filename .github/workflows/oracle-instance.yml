@@ -1,0 +1,34 @@
+name: Oracle Free Tier Instance Creator
+
+on:
+  schedule:
+    - cron: '30 7 * * *'   # diario ~03:30-04:30 AM Chile
+  workflow_dispatch:         # para correrlo manual cuando quieras
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore OCI config files
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_private_key.pem
+          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
+          echo "${{ secrets.OCI_ENV }}" > oci.env
+          chmod 600 ~/.oci/oci_api_private_key.pem
+
+      - name: Run instance creation script
+        run: python3 main.py
