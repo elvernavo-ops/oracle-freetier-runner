@@ -62,6 +62,25 @@ try:
     if config_has_spaces:
         raise ValueError("oci_config has spaces in values which is not acceptable")        
 
+except configparser.NoSectionError:
+    msg = (
+        "oci_config is missing the [DEFAULT] section. "
+        "Ensure your config file matches the format shown in sample_oci_config."
+    )
+    with open("ERROR_IN_CONFIG.log", "w", encoding='utf-8') as file:
+        file.write(msg)
+    print(msg)
+
+except configparser.NoOptionError:
+    msg = (
+        "oci_config is missing the 'user' key under [DEFAULT]. "
+        "Copy the OCID from your OCI profile and add: user=ocid1.user.oc1..<your-ocid>. "
+        "Refer to sample_oci_config for the expected format."
+    )
+    with open("ERROR_IN_CONFIG.log", "w", encoding='utf-8') as file:
+        file.write(msg)
+    print(msg)
+
 except configparser.Error as e:
     with open("ERROR_IN_CONFIG.log", "w", encoding='utf-8') as file:
         file.write(str(e))
@@ -155,8 +174,11 @@ def list_all_instances(compartment_id):
     Returns:
         list: The list of instances returned from the OCI service.
     """
-    list_instances_response = compute_client.list_instances(compartment_id=compartment_id)
-    return list_instances_response.data
+    return execute_oci_command(
+        compute_client,
+        "list_instances",
+        compartment_id=compartment_id,
+    )
 
 
 def generate_html_body(instance):
@@ -277,17 +299,34 @@ def handle_errors(command, data, log):
     """
 
     # Check for temporary errors that can be retried
-    if "code" in data:
-        if (data["code"] in ("TooManyRequests", "Out of host capacity.", 'InternalError')) \
-                or (data["message"] in ("Out of host capacity.", "Bad Gateway")):
-            log.info("Command: %s--\nOutput: %s", command, data)
-            time.sleep(WAIT_TIME)
-            return True
+    retryable_codes = {
+        "TooManyRequests",
+        "Out of host capacity.",
+        "InternalError",
+        "RequestException",
+    }
+    retryable_statuses = {502, 503, 504}
+    retryable_messages = (
+        "Out of host capacity.",
+        "Bad Gateway",
+        "Max retries exceeded",
+        "ProxyError",
+        "Tunnel connection failed",
+        "Connection aborted",
+        "ConnectTimeout",
+        "Read timed out",
+    )
+    message = data.get("message", "")
 
-    if "status" in data and data["status"] == 502:
-        log.info("Command: %s~~\nOutput: %s", command, data)
+    if (
+        data.get("code") in retryable_codes
+        or data.get("status") in retryable_statuses
+        or any(retry_msg in message for retry_msg in retryable_messages)
+    ):
+        log.info("Command: %s--\nOutput: %s", command, data)
         time.sleep(WAIT_TIME)
         return True
+
     failure_msg = '\n'.join([f'{key}: {value}' for key, value in data.items()])
     notify_on_failure(failure_msg)
     # Raise an exception for unexpected errors
@@ -318,6 +357,13 @@ def execute_oci_command(client, method, *args, **kwargs):
             data = {"status": srv_err.status,
                     "code": srv_err.code,
                     "message": srv_err.message}
+            handle_errors(args, data, logging_step5)
+        except oci.exceptions.RequestException as req_err:
+            data = {
+                "status": None,
+                "code": "RequestException",
+                "message": str(req_err),
+            }
             handle_errors(args, data, logging_step5)
 
 
@@ -426,7 +472,7 @@ def launch_instance():
     instance_exist_flag = check_instance_state_and_write(oci_tenancy, OCI_COMPUTE_SHAPE, tries=1)
 
     if OCI_COMPUTE_SHAPE == "VM.Standard.A1.Flex":
-        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=4, memory_in_gbs=24)
+        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=2, memory_in_gbs=12)
     else:
         shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=1)
 
@@ -479,6 +525,13 @@ def launch_instance():
                 "status": srv_err.status,
                 "code": srv_err.code,
                 "message": srv_err.message,
+            }
+            handle_errors("launch_instance", data, logging_step5)
+        except oci.exceptions.RequestException as req_err:
+            data = {
+                "status": None,
+                "code": "RequestException",
+                "message": str(req_err),
             }
             handle_errors("launch_instance", data, logging_step5)
 
