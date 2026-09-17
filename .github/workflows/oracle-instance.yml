@@ -26,9 +26,12 @@ jobs:
         run: |
           mkdir -p ~/.oci
           echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_private_key.pem
+          chmod 600 ~/.oci/oci_api_private_key.pem
           echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
           echo "${{ secrets.OCI_ENV }}" > oci.env
-          chmod 600 ~/.oci/oci_api_private_key.pem
+          sudo mkdir -p /home/elvernavo/oracle-freetier-instance-creation
+          sudo chown -R runner:runner /home/elvernavo
+          cp ~/.oci/config /home/elvernavo/oracle-freetier-instance-creation/oci_config
 
       - name: Run instance creation script
         run: python3 main.py
