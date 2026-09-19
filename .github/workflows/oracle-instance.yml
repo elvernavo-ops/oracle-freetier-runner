@@ -2,13 +2,19 @@ name: Oracle Free Tier Instance Creator
 
 on:
   schedule:
-    - cron: '30 7 * * *'   # diario ~03:30-04:30 AM Chile
-  workflow_dispatch:         # para correrlo manual cuando quieras
+    - cron: '15 */6 * * *'   # cada 6 horas
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-hunt
+  cancel-in-progress: false
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 350
+    env:
+      PYTHONUNBUFFERED: '1'
 
     steps:
       - name: Checkout repo
@@ -32,6 +38,7 @@ jobs:
           sudo mkdir -p /home/elvernavo/oracle-freetier-instance-creation
           sudo chown -R runner:runner /home/elvernavo
           cp ~/.oci/config /home/elvernavo/oracle-freetier-instance-creation/oci_config
+          echo "${{ secrets.OCI_SSH_PUBKEY }}" > /home/elvernavo/oracle-freetier-instance-creation/id_rsa.pub
 
       - name: Run instance creation script
         run: python3 main.py
