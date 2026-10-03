@@ -304,6 +304,8 @@ def handle_errors(command, data, log):
         "Out of host capacity.",
         "InternalError",
         "RequestException",
+        "ConnectTimeout",
+        "ReadTimeout",
     }
     retryable_statuses = {502, 503, 504}
     retryable_messages = (
@@ -472,9 +474,9 @@ def launch_instance():
     instance_exist_flag = check_instance_state_and_write(oci_tenancy, OCI_COMPUTE_SHAPE, tries=1)
 
     if OCI_COMPUTE_SHAPE == "VM.Standard.A1.Flex":
-        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=2, memory_in_gbs=12)
+        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=6)
     else:
-        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=1)
+        shape_config = oci.core.models.LaunchInstanceShapeConfigDetails(ocpus=1, memory_in_gbs=6)
 
     while not instance_exist_flag:
         try:
